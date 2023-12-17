@@ -1,0 +1,8 @@
+[package]
+name = "acc"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+regex = "1.7"
+clap = { version = "4.2", features = ["derive"]}
