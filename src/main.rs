@@ -10,7 +10,6 @@ use std::path::PathBuf;
 #[derive(Clone, ValueEnum)]
 enum CompilerAction {
     Compile,
-    // TODO : add ability to not remove asm file when building or running
     Build,
     Run,
 }
@@ -22,6 +21,7 @@ struct Args {
     input: std::path::PathBuf,
     #[arg(short, long)]
     output: Option<String>,
+    // TODO: be more descriptive about option:
     #[arg(short)]
     keep_asm: bool,
 }

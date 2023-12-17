@@ -86,7 +86,7 @@ impl<'k, 's, K: Copy> Iterator for Tokens<'k, 's, K> {
                 }
             }
             if let None = kind {
-                // TODO : print a more useful message and handle the error
+                // TODO : print a more useful message and handle the error better
                 println!("Invalid syntax at {}", self.position);
                 return None;
             }
