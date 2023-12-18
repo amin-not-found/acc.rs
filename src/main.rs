@@ -28,15 +28,14 @@ struct Args {
 
 fn compile(input: PathBuf) -> PathBuf {
     let content = std::fs::read_to_string(&input)
-        .expect(format!("could not read input file {:?}", input).as_str());
+        .unwrap_or_else(|e| panic!("could not read input file {:?}: {}", input,e));
     let code = content.as_str();
 
     let program = parse(code);
     let file_name = input.file_stem().unwrap().to_str().unwrap();
-    // TODO : check if the file already exists
     let out_file = PathBuf::from(format!("{}.s", file_name));
     std::fs::write(&out_file, program.to_asm()).unwrap();
-    out_file.into()
+    out_file
 }
 
 fn build(input: PathBuf, output: Option<String>, keep_asm: bool) -> PathBuf {

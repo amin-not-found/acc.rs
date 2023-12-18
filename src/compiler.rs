@@ -4,7 +4,7 @@ use crate::ast::Parse;
 use crate::tokenizer;
 
 pub fn parse(code: &str) -> ast::Program {
-    let t = tokenizer::CTokenizer::new();
+    let t = tokenizer::CTokenizer::default();
     let mut tokens = t.tokens(code);
     ast::Program::parse(&mut tokens).unwrap()
 }

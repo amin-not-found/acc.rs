@@ -20,7 +20,7 @@ fn expect_token<'a>(
     let token = next_token(tokens)?;
     if discriminant(&token.kind) != discriminant(&typ) {
         return Err(ParseError::new(
-            error_msg.unwrap_or(format!("Expected {:?}", typ)).into(),
+            error_msg.unwrap_or(format!("Expected {:?}", typ)),
             tokens,
         ));
     }
@@ -163,7 +163,7 @@ impl AsmGen for Function {
 
 impl Display for Function{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let body = self.body.to_string().replace("\n", "\n\t\t");
+        let body = self.body.to_string().replace('\n', "\n\t\t");
         write!(f, "FUN INT {}:\n\tparams: ()\n\tbody:\n\t\t{}", self.name, body)
     }
 }

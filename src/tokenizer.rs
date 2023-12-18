@@ -37,8 +37,8 @@ impl<'a, K> Tokenizer<'a, K> {
         }
         Tokens {
             kinds: &self.kinds,
-            regexes: regexes,
-            source: source,
+            regexes,
+            source,
             position: 0,
             current: None,
         }
@@ -85,7 +85,7 @@ impl<'k, 's, K: Copy> Iterator for Tokens<'k, 's, K> {
                     break;
                 }
             }
-            if let None = kind {
+            if kind.is_none() {
                 // TODO : print a more useful message and handle the error better
                 println!("Invalid syntax at {}", self.position);
                 return None;
@@ -124,9 +124,19 @@ pub struct CTokenizer<'a> {
     tokenizer: Tokenizer<'a, CToken>,
 }
 impl<'a> CTokenizer<'a> {
-    pub fn new() -> Self {
+    pub fn new(tokens: Vec<(CToken, &'a str)>) -> Self {
         let mut t = Tokenizer::new();
-        t.add_tokens(vec![
+        t.add_tokens(tokens);
+        Self { tokenizer: t }
+    }
+    pub fn tokens<'t, 's: 't>(&'t self, source: &'s str) -> Tokens<CToken> {
+        self.tokenizer.tokens(source)
+    }
+}
+
+impl<'a> Default for CTokenizer<'a> {
+    fn default() -> Self {
+        Self::new(vec![
             (CToken::OpenBrace, r"^\{"),
             (CToken::CloseBrace, r"^\}"),
             (CToken::OpenParenthesis, r"^\("),
@@ -142,10 +152,6 @@ impl<'a> CTokenizer<'a> {
             ///////// End of keywords
             (CToken::Identifier, r"^[a-zA-Z]\w*"),
             (CToken::IntLiteral, r"^[0-9]+"),
-        ]);
-        Self { tokenizer: t }
-    }
-    pub fn tokens<'t, 's: 't>(&'t self, source: &'s str) -> Tokens<CToken> {
-        self.tokenizer.tokens(source)
+        ])
     }
 }
