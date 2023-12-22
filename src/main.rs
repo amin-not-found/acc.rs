@@ -16,36 +16,34 @@ enum CompilerAction {
 
 #[derive(Parser)]
 struct Args {
-    // TODO : use command instead
     action: CompilerAction,
     input: std::path::PathBuf,
     #[arg(short, long)]
     output: Option<String>,
-    // TODO: be more descriptive about option:
-    #[arg(short)]
+    #[arg(short, help = "Keep generated assembly file")]
     keep_asm: bool,
 }
 
-fn compile(input: PathBuf) -> PathBuf {
-    let content = std::fs::read_to_string(&input)
-        .unwrap_or_else(|e| panic!("could not read input file {:?}: {}", input,e));
-    let code = content.as_str();
+fn compile(args: &Args) -> PathBuf {
+    let input = &args.input;
+    let code = std::fs::read_to_string(input)
+        .unwrap_or_else(|e| panic!("could not read input file {:?}: {}", input, e));
 
-    let program = parse(code);
     let file_name = input.file_stem().unwrap().to_str().unwrap();
     let out_file = PathBuf::from(format!("{}.s", file_name));
-    std::fs::write(&out_file, program.to_asm()).unwrap();
+    let asm = parse(code.as_str()).to_asm();
+    std::fs::write(&out_file, asm).unwrap();
     out_file
 }
 
-fn build(input: PathBuf, output: Option<String>, keep_asm: bool) -> PathBuf {
-    // TODO : avoid multiple calls to file_name here and inside compile()
+fn build(args: &Args) -> PathBuf {
+    let input = &args.input;
     let file_name = input.file_stem().unwrap().to_str().unwrap();
     let out_file = input
         .parent()
         .unwrap()
-        .join(output.unwrap_or(file_name.into()));
-    let asm_file = compile(input);
+        .join(args.output.clone().unwrap_or(file_name.into()));
+    let asm_file = compile(args);
 
     std::process::Command::new("gcc")
         .arg(&asm_file)
@@ -54,14 +52,14 @@ fn build(input: PathBuf, output: Option<String>, keep_asm: bool) -> PathBuf {
         .unwrap_or_else(|e| panic!("Couldn't compile assembly to binary with gcc: {e}"))
         .wait()
         .unwrap();
-    if !keep_asm {
+    if !args.keep_asm {
         std::fs::remove_file(asm_file).unwrap();
     }
     out_file
 }
 
-fn run(input: PathBuf, output: Option<String>, keep_asm: bool) {
-    let out_file = build(input, output, keep_asm);
+fn run(args: &Args) {
+    let out_file = build(args);
     std::process::Command::new(out_file)
         .spawn()
         .unwrap_or_else(|e| panic!("Couldn't run compiled code: {e}"))
@@ -76,17 +74,13 @@ fn run(input: PathBuf, output: Option<String>, keep_asm: bool) {
 fn main() {
     let args: Args = Args::parse();
     use CompilerAction::*;
-    let input = args.input;
-    let output = args.output;
-    // TODO : refactor usage of arguments especially keep_asm
-    let keep_asm = args.keep_asm;
     match args.action {
         Compile => {
-            compile(input);
+            compile(&args);
         }
         Build => {
-            build(input, output, keep_asm);
+            build(&args);
         }
-        Run => run(input, output, keep_asm),
+        Run => run(&args),
     };
 }
