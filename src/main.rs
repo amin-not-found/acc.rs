@@ -22,6 +22,8 @@ struct Args {
     output: Option<String>,
     #[arg(short, help = "Keep generated assembly file")]
     keep_asm: bool,
+    #[arg(long, help = "print AST to stdin")]
+    ast: bool,
 }
 
 fn compile(args: &Args) -> PathBuf {
@@ -31,8 +33,11 @@ fn compile(args: &Args) -> PathBuf {
 
     let file_name = input.file_stem().unwrap().to_str().unwrap();
     let out_file = PathBuf::from(format!("{}.s", file_name));
-    let asm = parse(code.as_str()).to_asm();
-    std::fs::write(&out_file, asm).unwrap();
+    let program = parse(&code);
+    if args.ast {
+        println!("{}", program)
+    }
+    std::fs::write(&out_file, program.to_asm()).unwrap();
     out_file
 }
 
