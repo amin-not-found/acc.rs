@@ -54,21 +54,26 @@ pub trait AsmGen {
     fn to_asm(&self) -> String;
 }
 
-
 #[derive(Debug)]
 pub enum Expression {
     Constant(i32),
+    UnaryOp(CToken, Box<Expression>),
 }
 
 impl Parse for Expression {
     fn parse<'a>(tokens: &mut Tokens<'a, 'a, CToken>) -> Result<Self, ParseError<'a>> {
+        use CToken::*;
         let token = next_token(tokens)?;
         match token.kind {
-            CToken::IntLiteral => {
+            IntLiteral => {
                 let Ok(int) = token.text.parse::<i32>() else {
                     return Err(ParseError::new("Invalid int literal".into(), tokens));
                 };
                 Ok(Expression::Constant(int))
+            }
+            Negation | LogicalNegation | BitWiseComplement => {
+                let expr = Expression::parse(tokens)?;
+                Ok(Expression::UnaryOp(token.kind, Box::new(expr)))
             }
             _ => Err(ParseError::new("Expected int literal".into(), tokens)),
         }
@@ -77,8 +82,21 @@ impl Parse for Expression {
 
 impl AsmGen for Expression {
     fn to_asm(&self) -> String {
+        use CToken::*;
         match self {
             Self::Constant(i) => format!("movl ${}, %eax", i),
+            Self::UnaryOp(op, expr) => match op {
+                Negation => format!("{}\nneg %eax", expr.to_asm()),
+                BitWiseComplement => format!("{}\nnot %eax", expr.to_asm()),
+                LogicalNegation => format!(
+                    "{}\n\
+                     cmpl $0, %eax\n\
+                     movl   $0, %eax\n\
+                     sete %al",
+                    expr.to_asm()
+                ),
+                _ => panic!("Unsupported unary operator {:?}", op),
+            },
         }
     }
 }
@@ -86,7 +104,8 @@ impl AsmGen for Expression {
 impl Display for Expression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Constant(i) => write!(f, "Int<{}>", i),
+            Self::Constant(i) => write!(f, "IntLiteral<{}>", i),
+            Self::UnaryOp(op, expr) => write!(f, "UnaryOp<{:?}, {}>", op, expr),
         }
     }
 }
@@ -121,7 +140,7 @@ impl AsmGen for Statement {
 impl Display for Statement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Return(expr) => write!(f, "RETURN {}", expr),
+            Self::Return(expr) => write!(f, "Return {}", expr),
         }
     }
 }
@@ -161,10 +180,15 @@ impl AsmGen for Function {
     }
 }
 
-impl Display for Function{
+impl Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let body = self.body.to_string().replace('\n', "\n\t\t");
-        write!(f, "FUN INT {}:\n\tparams: ()\n\tbody:\n\t\t{}", self.name, body)
+        write!(
+            f,
+            "Function Int {}:\n\tparams: ()\n\tbody:\n\t\t{}",
+            self.name,
+            body.replace('\n', "\n\t\t")
+        )
     }
 }
 
@@ -187,10 +211,10 @@ impl AsmGen for Program {
     }
 }
 
-impl Display for Program{
+impl Display for Program {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self{
-            Self::Main(func) => write!(f, "{}", func)
+        match self {
+            Self::Main(func) => write!(f, "{}", func),
         }
     }
 }
