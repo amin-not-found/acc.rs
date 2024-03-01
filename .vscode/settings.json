@@ -1,8 +1,12 @@
 {
     "cSpell.words": [
-        "movl",
-        "regexes",
         "cmpl",
+        "idiv",
+        "imul",
+        "movl",
+        "movzx",
+        "peekable",
+        "regexes",
         "sete"
     ]
 }

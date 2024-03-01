@@ -29,43 +29,59 @@ impl<'a, K> Tokenizer<'a, K> {
             self.add_token(token.0, token.1);
         }
     }
-    fn tokens<'k, 't: 'k, 's>(&'t self, source: &'s str) -> Tokens<'k, 's, K> {
+    fn tokens(self, source: &str) -> Tokens<'_, K> {
         let regex_set = regex::RegexSet::new(&self.regexes).unwrap();
         let mut regexes = Vec::new();
         for pattern in regex_set.patterns() {
             regexes.push(regex::Regex::new(pattern).unwrap());
         }
         Tokens {
-            kinds: &self.kinds,
+            kinds: self.kinds,
             regexes,
             source,
             position: 0,
             current: None,
+            peeked: false,
         }
     }
 }
 
 #[derive(Debug)]
-pub struct Tokens<'k, 's, K> {
-    kinds: &'k Vec<K>,
+pub struct Tokens<'s, K> {
+    kinds: Vec<K>,
     regexes: Vec<regex::Regex>,
     source: &'s str,
     position: usize,
     current: Option<Token<'s, K>>,
+    peeked: bool,
 }
 
-impl<'k, 's, K: Clone> Tokens<'k, 's, K> {
+impl<'s, K: Copy> Tokens<'s, K> {
     pub fn current_pos(&self) -> usize {
         self.position
     }
     pub fn current(&self) -> Option<Token<'s, K>> {
+        if self.peeked {
+            panic!("Can't see current item while peeking at next item.")
+        }
         self.current.clone()
     }
+    pub fn peek(&mut self) -> Option<Token<'s, K>> {
+        if self.peeked {
+            return self.current.clone();
+        }
+        let token = self.next();
+        self.peeked = true;
+        token
+    }
 }
-
-impl<'k, 's, K: Copy> Iterator for Tokens<'k, 's, K> {
+impl<'s, K: Copy> Iterator for Tokens<'s, K> {
     type Item = Token<'s, K>;
     fn next(&mut self) -> Option<Self::Item> {
+        if self.peeked {
+            self.peeked = false;
+            return self.current();
+        }
         let whitespace_rx = regex::Regex::new(r"^\s").unwrap();
         loop {
             if self.position == self.source.len() {
@@ -87,8 +103,11 @@ impl<'k, 's, K: Copy> Iterator for Tokens<'k, 's, K> {
             }
             if kind.is_none() {
                 // TODO : print a more useful message and handle the error better
-                println!("Invalid syntax at {}", self.position);
-                return None;
+                panic!(
+                    "Invalid syntax at {}: \"{}\"",
+                    self.position,
+                    string[0..string.find('\n').unwrap_or(string.len())].to_owned()
+                );
             }
             let m = rx.find(string).unwrap();
             let span = m.start() + self.position..m.end() + self.position;
@@ -111,9 +130,12 @@ pub enum CToken {
     OpenParenthesis,
     CloseParenthesis,
     Semicolon,
-    Negation,
     BitWiseComplement,
     LogicalNegation,
+    MultiplicationSign,
+    DivisionSign,
+    PlusSign,
+    MinusSign,
     ReturnKeyword,
     IntKeyword,
     Identifier,
@@ -129,7 +151,7 @@ impl<'a> CTokenizer<'a> {
         t.add_tokens(tokens);
         Self { tokenizer: t }
     }
-    pub fn tokens<'t, 's: 't>(&'t self, source: &'s str) -> Tokens<CToken> {
+    pub fn tokens<'t, 's: 't>(self, source: &'s str) -> Tokens<CToken> {
         self.tokenizer.tokens(source)
     }
 }
@@ -142,9 +164,12 @@ impl<'a> Default for CTokenizer<'a> {
             (CToken::OpenParenthesis, r"^\("),
             (CToken::CloseParenthesis, r"^\)"),
             (CToken::Semicolon, r"^;"),
-            (CToken::Negation, r"^\-"),
             (CToken::BitWiseComplement, r"^\~"),
             (CToken::LogicalNegation, r"^!"),
+            (CToken::MultiplicationSign, r"^\*"),
+            (CToken::DivisionSign, r"^/"),
+            (CToken::PlusSign, r"^\+"),
+            (CToken::MinusSign, r"^\-"),
             // TODO : do something about keywords needing a whitespace after them
             ///////// Start of keywords
             (CToken::ReturnKeyword, r"^return\s"),

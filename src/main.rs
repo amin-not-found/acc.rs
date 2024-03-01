@@ -28,11 +28,13 @@ struct Args {
 
 fn compile(args: &Args) -> PathBuf {
     let input = &args.input;
+    let path = input.parent().to_owned().unwrap();
+    let file_name = input.file_stem().unwrap().to_str().unwrap();
+    let out_file = path.join(format!("{}.s", file_name));
+
     let code = std::fs::read_to_string(input)
         .unwrap_or_else(|e| panic!("could not read input file {:?}: {}", input, e));
 
-    let file_name = input.file_stem().unwrap().to_str().unwrap();
-    let out_file = PathBuf::from(format!("{}.s", file_name));
     let program = parse(&code);
     if args.ast {
         println!("{}", program)
@@ -50,6 +52,7 @@ fn build(args: &Args) -> PathBuf {
         .join(args.output.clone().unwrap_or(file_name.into()));
     let asm_file = compile(args);
 
+    // TODO : switch to Intel syntax
     std::process::Command::new("gcc")
         .arg(&asm_file)
         .arg(format!("-o{}", &out_file.display()))

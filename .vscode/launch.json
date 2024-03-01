@@ -1,0 +1,14 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "(Windows) Compiler",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceRoot}/target/debug/acc.exe",
+            "args": ["build", "${workspaceRoot}/test/test.c"],
+            "cwd": "${workspaceRoot}",
+            "console": "internalConsole",
+        }
+    ]
+}
