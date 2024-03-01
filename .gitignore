@@ -1,4 +1,5 @@
 /target
 /test_suite
-/test.*
 /.project.json
+**/**.exe
+**/**.s
