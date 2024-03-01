@@ -5,6 +5,7 @@
         "imul",
         "movl",
         "movzx",
+        "noprefix",
         "peekable",
         "regexes",
         "sete"

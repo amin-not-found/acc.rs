@@ -52,7 +52,6 @@ fn build(args: &Args) -> PathBuf {
         .join(args.output.clone().unwrap_or(file_name.into()));
     let asm_file = compile(args);
 
-    // TODO : switch to Intel syntax
     std::process::Command::new("gcc")
         .arg(&asm_file)
         .arg(format!("-o{}", &out_file.display()))

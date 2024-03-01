@@ -103,15 +103,15 @@ impl AsmGen for PrimaryExpr {
     fn to_asm(&self) -> String {
         use CToken::*;
         match &self {
-            Self::Constant(i) => format!("mov ${}, %rax\n", i),
+            Self::Constant(i) => format!("mov rax, {}\n", i),
             Self::UnaryOp(op, expr) => match op {
-                MinusSign => format!("{}neg %rax\n", expr.to_asm()),
-                BitWiseComplement => format!("{}not %rax\n", expr.to_asm()),
+                MinusSign => format!("{}neg rax\n", expr.to_asm()),
+                BitWiseComplement => format!("{}not rax\n", expr.to_asm()),
                 LogicalNegation => format!(
                     "{}\
-                     test %eax, %eax\n\
-                     sete %al\n\
-                     movzx %al, %eax\n",
+                     test eax, eax\n\
+                     sete al\n\
+                     movzx eax, al\n",
                     expr.to_asm()
                 ),
                 _ => panic!("Unsupported unary operator {:?}", op),
@@ -170,10 +170,10 @@ impl AsmGen for MultiplicativeExpr {
             };
             format!(
                 "{}\
-                push %rax\n\
+                push rax\n\
                 {}\
-                pop %rbx\n\
-                {} %rbx, %rax\n",
+                pop rbx\n\
+                {} rax, rbx\n",
                 rhs.to_asm(), lhs.to_asm(), op
             )
         }
@@ -229,10 +229,10 @@ impl AsmGen for AdditiveExpr {
             };
             format!(
                 "{}\
-                push %rax\n\
+                push rax\n\
                 {}\
-                pop %rbx\n\
-                {} %rbx, %rax\n",
+                pop rbx\n\
+                {} rax, rbx\n",
                 rhs.to_asm(), lhs.to_asm(), op
             )
         }
@@ -273,7 +273,7 @@ impl Parse for Statement {
 impl AsmGen for Statement {
     fn to_asm(&self) -> String {
         match self {
-            Self::Return(expr) => format!("{}\nret\n", expr.to_asm()),
+            Self::Return(expr) => format!("{}ret\n", expr.to_asm()),
         }
     }
 }
@@ -348,7 +348,7 @@ impl Parse for Program {
 impl AsmGen for Program {
     fn to_asm(&self) -> String {
         match self {
-            Self::Main(f) => f.to_asm(),
+            Self::Main(f) => format!(".intel_syntax noprefix\n{}", f.to_asm()),
         }
     }
 }
