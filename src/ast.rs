@@ -4,9 +4,7 @@ use crate::tokenizer::{CToken, Token, Tokens};
 
 type CTokens<'a> = Tokens<'a, CToken>;
 
-fn next_token<'a>(
-    tokens: &mut CTokens<'a>,
-) -> Result<Token<'a, CToken>, ParseError<'a>> {
+fn next_token<'a>(tokens: &mut CTokens<'a>) -> Result<Token<'a, CToken>, ParseError<'a>> {
     let t = tokens.next();
     match t {
         Some(token) => Ok(token),
@@ -14,9 +12,7 @@ fn next_token<'a>(
     }
 }
 
-fn peek_token<'a>(
-    tokens: &mut CTokens<'a>,
-) -> Result<Token<'a, CToken>, ParseError<'a>> {
+fn peek_token<'a>(tokens: &mut CTokens<'a>) -> Result<Token<'a, CToken>, ParseError<'a>> {
     let t = tokens.peek();
     match t {
         Some(token) => Ok(token.clone()),
@@ -121,6 +117,16 @@ impl AsmGen for PrimaryExpr {
     }
 }
 
+impl std::convert::From<MultiplicativeExpr> for PrimaryExpr {
+    fn from(value: MultiplicativeExpr) -> Self {
+        if let MultiplicativeExpr::PrimaryExpr(expr) = value {
+            expr
+        } else {
+            Self::Expression(AdditiveExpr::MultiplicativeExpr(value).into())
+        }
+    }
+}
+
 impl Display for PrimaryExpr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
@@ -141,20 +147,22 @@ impl Parse for MultiplicativeExpr {
     // multiplicative-expr ::= <primary-expr> ("*" | "/") <primary-expr> | <primary-expr>
     fn parse<'a>(tokens: &mut CTokens<'a>) -> Result<Self, ParseError<'a>> {
         use CToken::*;
-        let lhs = PrimaryExpr::parse(tokens)?;
-        let token = peek_token(tokens)?;
-        match token.kind {
-            MultiplicationSign => {
-                _ = tokens.next();
-                let rhs = PrimaryExpr::parse(tokens)?;
-                Ok(Self::Multiplication(lhs, rhs))
+        let mut lhs: Self = Self::PrimaryExpr(PrimaryExpr::parse(tokens)?);
+        loop {
+            let token = peek_token(tokens)?;
+            match token.kind {
+                MultiplicationSign => {
+                    _ = tokens.next();
+                    let rhs = PrimaryExpr::parse(tokens)?;
+                    lhs = Self::Multiplication(lhs.into(), rhs);
+                }
+                DivisionSign => {
+                    _ = tokens.next();
+                    let rhs = PrimaryExpr::parse(tokens)?;
+                    lhs = Self::Division(lhs.into(), rhs);
+                }
+                _ => return Ok(lhs),
             }
-            DivisionSign => {
-                _ = tokens.next();
-                let rhs = PrimaryExpr::parse(tokens)?;
-                Ok(Self::Division(lhs, rhs))
-            }
-            _ => Ok(Self::PrimaryExpr(lhs)),
         }
     }
 }
@@ -165,7 +173,7 @@ impl AsmGen for MultiplicativeExpr {
         } else {
             let (op, lhs, rhs) = match self {
                 Self::Multiplication(lhs, rhs) => ("imul", lhs, rhs),
-                Self::Division(lhs, rhs) => ("cdq\nidiv", lhs, rhs),
+                Self::Division(lhs, rhs) => ("cqo\nidiv", lhs, rhs),
                 Self::PrimaryExpr(_) => panic!("Unreachable"),
             };
             format!(
@@ -173,12 +181,25 @@ impl AsmGen for MultiplicativeExpr {
                 push rax\n\
                 {}\
                 pop rbx\n\
-                {} rax, rbx\n",
-                rhs.to_asm(), lhs.to_asm(), op
+                {} rbx\n",
+                rhs.to_asm(),
+                lhs.to_asm(),
+                op
             )
         }
     }
 }
+
+impl std::convert::From<AdditiveExpr> for MultiplicativeExpr {
+    fn from(value: AdditiveExpr) -> Self {
+        if let AdditiveExpr::MultiplicativeExpr(expr) = value {
+            expr
+        } else {
+            MultiplicativeExpr::PrimaryExpr(PrimaryExpr::Expression(value.into()))
+        }
+    }
+}
+
 impl Display for MultiplicativeExpr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
@@ -199,20 +220,22 @@ pub enum AdditiveExpr {
 impl Parse for AdditiveExpr {
     fn parse<'a>(tokens: &mut CTokens<'a>) -> Result<Self, ParseError<'a>> {
         use CToken::*;
-        let lhs = MultiplicativeExpr::parse(tokens)?;
-        let token = peek_token(tokens)?;
-        match token.kind {
-            PlusSign => {
-                _ = tokens.next();
-                let rhs = MultiplicativeExpr::parse(tokens)?;
-                Ok(Self::Addition(lhs, rhs))
+        let mut lhs = Self::MultiplicativeExpr(MultiplicativeExpr::parse(tokens)?);
+        loop {
+            let token = peek_token(tokens)?;
+            match token.kind {
+                PlusSign => {
+                    _ = tokens.next();
+                    let rhs = MultiplicativeExpr::parse(tokens)?;
+                    lhs = Self::Addition(lhs.into(), rhs);
+                }
+                MinusSign => {
+                    _ = tokens.next();
+                    let rhs = MultiplicativeExpr::parse(tokens)?;
+                    lhs = Self::Subtraction(lhs.into(), rhs);
+                }
+                _ => return Ok(lhs),
             }
-            MinusSign => {
-                _ = tokens.next();
-                let rhs = MultiplicativeExpr::parse(tokens)?;
-                Ok(Self::Subtraction(lhs, rhs))
-            }
-            _ => Ok(Self::MultiplicativeExpr(lhs)),
         }
     }
 }
@@ -233,7 +256,9 @@ impl AsmGen for AdditiveExpr {
                 {}\
                 pop rbx\n\
                 {} rax, rbx\n",
-                rhs.to_asm(), lhs.to_asm(), op
+                rhs.to_asm(),
+                lhs.to_asm(),
+                op
             )
         }
     }
@@ -327,8 +352,7 @@ impl Display for Function {
         write!(
             f,
             "Function(return=Int, \n  name={}:\n  params=()\n  body={})",
-            self.name,
-            body,
+            self.name, body,
         )
     }
 }

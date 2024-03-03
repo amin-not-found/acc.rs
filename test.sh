@@ -15,9 +15,9 @@ if [ ! -f "${input}" ]; then
 fi
 
 echo "GCC ----------------------"
-gcc.exe $input -o test/${1}_gcc.exe && ./test/${1}_gcc.exe; echo $?
+gcc.exe $input -o test/${1}_gcc.exe && ./test/${1}_gcc.exe; echo return code: $?
 echo "--------------------------"
 echo
 echo "ACC ----------------------"
-cargo.exe run -- build -k --ast $input && ./test/${1}.exe; echo $?
+cargo.exe run -- build -k --ast $input && ./test/${1}.exe; echo return code: $?
 echo "--------------------------"

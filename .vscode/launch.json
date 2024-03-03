@@ -6,7 +6,7 @@
             "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceRoot}/target/debug/acc.exe",
-            "args": ["build", "${workspaceRoot}/test/test.c"],
+            "args": ["compile", "${workspaceRoot}/test/test.c"],
             "cwd": "${workspaceRoot}",
             "console": "internalConsole",
         }
