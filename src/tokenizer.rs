@@ -11,6 +11,7 @@ pub struct Token<'t, K> {
 struct Tokenizer<'a, K> {
     kinds: Vec<K>,
     regexes: Vec<&'a str>,
+    line_comment: Option<String>,
 }
 
 impl<'a, K> Tokenizer<'a, K> {
@@ -18,6 +19,7 @@ impl<'a, K> Tokenizer<'a, K> {
         Tokenizer {
             kinds: Vec::new(),
             regexes: Vec::new(),
+            line_comment: None,
         }
     }
     fn add_token(&mut self, kind: K, re: &'a str) {
@@ -28,6 +30,9 @@ impl<'a, K> Tokenizer<'a, K> {
         for token in tokens {
             self.add_token(token.0, token.1);
         }
+    }
+    fn set_line_comment(&mut self, lc: String) {
+        self.line_comment = Some(lc);
     }
     fn tokens(self, source: &str) -> Tokens<'_, K> {
         let regex_set = regex::RegexSet::new(&self.regexes).unwrap();
@@ -42,6 +47,7 @@ impl<'a, K> Tokenizer<'a, K> {
             position: 0,
             current: None,
             peeked: false,
+            line_comment: self.line_comment,
         }
     }
 }
@@ -54,6 +60,7 @@ pub struct Tokens<'s, K> {
     position: usize,
     current: Option<Token<'s, K>>,
     peeked: bool,
+    line_comment: Option<String>,
 }
 
 impl<'s, K: Copy> Tokens<'s, K> {
@@ -75,6 +82,7 @@ impl<'s, K: Copy> Tokens<'s, K> {
         token
     }
 }
+
 impl<'s, K: Copy> Iterator for Tokens<'s, K> {
     type Item = Token<'s, K>;
     fn next(&mut self) -> Option<Self::Item> {
@@ -92,6 +100,14 @@ impl<'s, K: Copy> Iterator for Tokens<'s, K> {
                 self.position += 1;
                 continue;
             }
+            if let Some(lc) = &self.line_comment {
+                if string.starts_with(lc) {
+                    let comment_len = string.find('\n').unwrap_or(string.len());
+                    self.position += comment_len;
+                    continue;
+                }
+            }
+
             let mut rx: &regex::Regex = &self.regexes[0];
             let mut kind: Option<K> = None;
             for i in 0..self.regexes.len() {
@@ -109,6 +125,7 @@ impl<'s, K: Copy> Iterator for Tokens<'s, K> {
                     string[0..string.find('\n').unwrap_or(string.len())].to_owned()
                 );
             }
+
             let m = rx.find(string).unwrap();
             let span = m.start() + self.position..m.end() + self.position;
             let text = &self.source[span.clone()];
@@ -149,6 +166,7 @@ impl<'a> CTokenizer<'a> {
     pub fn new(tokens: Vec<(CToken, &'a str)>) -> Self {
         let mut t = Tokenizer::new();
         t.add_tokens(tokens);
+        t.set_line_comment("//".into());
         Self { tokenizer: t }
     }
     pub fn tokens<'t, 's: 't>(self, source: &'s str) -> Tokens<CToken> {
@@ -170,7 +188,6 @@ impl<'a> Default for CTokenizer<'a> {
             (CToken::DivisionSign, r"^/"),
             (CToken::PlusSign, r"^\+"),
             (CToken::MinusSign, r"^\-"),
-            // TODO : do something about keywords needing a whitespace after them
             ///////// Start of keywords
             (CToken::ReturnKeyword, r"^return\s"),
             (CToken::IntKeyword, r"^int\s"),
