@@ -62,11 +62,10 @@ pub trait AsmGen {
     fn to_asm(&self) -> String;
 }
 
-#[derive(Debug)]
 pub enum PrimaryExpr {
     Constant(i32),
     UnaryOp(CToken, Box<PrimaryExpr>),
-    Expression(Box<Expression>), // e.g. in case of parentheses
+    Expression(Box<BinaryOperand>), // e.g. in case of parentheses
 }
 
 impl Parse for PrimaryExpr {
@@ -117,16 +116,6 @@ impl AsmGen for PrimaryExpr {
     }
 }
 
-impl std::convert::From<MultiplicativeExpr> for PrimaryExpr {
-    fn from(value: MultiplicativeExpr) -> Self {
-        if let MultiplicativeExpr::PrimaryExpr(expr) = value {
-            expr
-        } else {
-            Self::Expression(AdditiveExpr::MultiplicativeExpr(value).into())
-        }
-    }
-}
-
 impl Display for PrimaryExpr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
@@ -136,146 +125,123 @@ impl Display for PrimaryExpr {
         }
     }
 }
-#[derive(Debug)]
-pub enum MultiplicativeExpr {
-    Multiplication(PrimaryExpr, PrimaryExpr),
-    Division(PrimaryExpr, PrimaryExpr),
-    PrimaryExpr(PrimaryExpr),
+
+pub struct BinaryOp {
+    lhs: BinaryOperand,
+    rhs: BinaryOperand,
+    op: CToken,
 }
 
-impl Parse for MultiplicativeExpr {
-    // multiplicative-expr ::= <primary-expr> ("*" | "/") <primary-expr> | <primary-expr>
-    fn parse<'a>(tokens: &mut CTokens<'a>) -> Result<Self, ParseError<'a>> {
-        use CToken::*;
-        let mut lhs: Self = Self::PrimaryExpr(PrimaryExpr::parse(tokens)?);
-        loop {
-            let token = peek_token(tokens)?;
-            match token.kind {
-                MultiplicationSign => {
-                    _ = tokens.next();
-                    let rhs = PrimaryExpr::parse(tokens)?;
-                    lhs = Self::Multiplication(lhs.into(), rhs);
-                }
-                DivisionSign => {
-                    _ = tokens.next();
-                    let rhs = PrimaryExpr::parse(tokens)?;
-                    lhs = Self::Division(lhs.into(), rhs);
-                }
-                _ => return Ok(lhs),
-            }
-        }
+impl BinaryOp {
+    fn new(lhs: BinaryOperand, rhs: BinaryOperand, op: CToken) -> Self {
+        Self { lhs, rhs, op }
     }
 }
-impl AsmGen for MultiplicativeExpr {
+
+impl AsmGen for BinaryOp {
     fn to_asm(&self) -> String {
-        if let Self::PrimaryExpr(expr) = &self {
-            expr.to_asm()
-        } else {
-            let (op, lhs, rhs) = match self {
-                Self::Multiplication(lhs, rhs) => ("imul", lhs, rhs),
-                Self::Division(lhs, rhs) => ("cqo\nidiv", lhs, rhs),
-                Self::PrimaryExpr(_) => panic!("Unreachable"),
-            };
-            format!(
-                "{}\
+        // first operand will be in rax
+        // second operand will be in rbx
+        // then op will be executed
+        let op: String = match self.op {
+            CToken::MultiplicationSign => "imul rbx".to_owned(),
+            CToken::DivisionSign => String::from(
+                "cqo\n\
+                 idiv rbx\n",
+            ),
+            CToken::PlusSign => String::from("add rax, rbx"),
+            CToken::MinusSign => "sub rax, rbx".to_owned(),
+            _ => panic!("Can't produce assembly from operation with {:?}", self.op),
+        };
+        format!(
+            "{}\
                 push rax\n\
                 {}\
                 pop rbx\n\
-                {} rbx\n",
-                rhs.to_asm(),
-                lhs.to_asm(),
-                op
-            )
-        }
+                {}\n",
+            self.rhs.to_asm(),
+            self.lhs.to_asm(),
+            op
+        )
     }
 }
 
-impl std::convert::From<AdditiveExpr> for MultiplicativeExpr {
-    fn from(value: AdditiveExpr) -> Self {
-        if let AdditiveExpr::MultiplicativeExpr(expr) = value {
-            expr
+pub enum BinaryOperand {
+    BinaryOp(Box<BinaryOp>),
+    Operand(PrimaryExpr),
+}
+
+impl BinaryOperand {
+    fn from_operands(lhs: BinaryOperand, rhs: BinaryOperand, op: CToken) -> Self {
+        let op = BinaryOp::new(rhs, lhs, op);
+        BinaryOperand::BinaryOp(op.into())
+    }
+    fn parse_selective_binop<'a>(
+        tokens: &mut CTokens<'a>,
+        precedences: &Vec<Vec<CToken>>,
+        precedence_idx: usize,
+    ) -> Result<BinaryOperand, ParseError<'a>> {
+        let mut lhs;
+
+        if precedence_idx >= precedences.len() {
+            return Ok(BinaryOperand::Operand(PrimaryExpr::parse(tokens)?));
         } else {
-            MultiplicativeExpr::PrimaryExpr(PrimaryExpr::Expression(value.into()))
+            lhs = Self::parse_selective_binop(tokens, precedences, precedence_idx + 1)?;
         }
-    }
-}
 
-impl Display for MultiplicativeExpr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self {
-            Self::Multiplication(lhs, rhs) => write!(f, "Multiplication(lhs={}, rhs={})", lhs, rhs),
-            Self::Division(lhs, rhs) => write!(f, "Division(lhs={}, rhs={})", lhs, rhs),
-            Self::PrimaryExpr(expr) => write!(f, "{}", expr),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum AdditiveExpr {
-    Addition(MultiplicativeExpr, MultiplicativeExpr),
-    Subtraction(MultiplicativeExpr, MultiplicativeExpr),
-    MultiplicativeExpr(MultiplicativeExpr),
-}
-
-impl Parse for AdditiveExpr {
-    fn parse<'a>(tokens: &mut CTokens<'a>) -> Result<Self, ParseError<'a>> {
-        use CToken::*;
-        let mut lhs = Self::MultiplicativeExpr(MultiplicativeExpr::parse(tokens)?);
         loop {
             let token = peek_token(tokens)?;
-            match token.kind {
-                PlusSign => {
-                    _ = tokens.next();
-                    let rhs = MultiplicativeExpr::parse(tokens)?;
-                    lhs = Self::Addition(lhs.into(), rhs);
-                }
-                MinusSign => {
-                    _ = tokens.next();
-                    let rhs = MultiplicativeExpr::parse(tokens)?;
-                    lhs = Self::Subtraction(lhs.into(), rhs);
-                }
-                _ => return Ok(lhs),
+            if precedences[precedence_idx].contains(&token.kind) {
+                _ = tokens.next();
+                let rhs = Self::parse_selective_binop(tokens, precedences, precedence_idx + 1)?;
+                lhs = BinaryOperand::from_operands(rhs, lhs, token.kind);
+            } else {
+                return Ok(lhs);
             }
         }
     }
 }
 
-impl AsmGen for AdditiveExpr {
+impl Parse for BinaryOperand {
+    fn parse<'a>(tokens: &mut CTokens<'a>) -> Result<Self, ParseError<'a>> {
+        use CToken::*;
+
+        let precedence_ops = vec![
+            vec![PlusSign, MinusSign],
+            vec![MultiplicationSign, DivisionSign],
+        ];
+
+        Self::parse_selective_binop(tokens, &precedence_ops, 0)
+    }
+}
+
+impl AsmGen for BinaryOperand {
     fn to_asm(&self) -> String {
-        if let Self::MultiplicativeExpr(expr) = &self {
-            expr.to_asm()
-        } else {
-            let (op, lhs, rhs) = match self {
-                Self::Addition(lhs, rhs) => ("add", lhs, rhs),
-                Self::Subtraction(lhs, rhs) => ("sub", lhs, rhs),
-                Self::MultiplicativeExpr(_) => panic!("Unreachable"),
-            };
-            format!(
-                "{}\
-                push rax\n\
-                {}\
-                pop rbx\n\
-                {} rax, rbx\n",
-                rhs.to_asm(),
-                lhs.to_asm(),
-                op
-            )
+        match self {
+            BinaryOperand::BinaryOp(op) => (**op).to_asm(),
+            BinaryOperand::Operand(op) => op.to_asm(),
         }
     }
 }
-impl Display for AdditiveExpr {
+
+impl Display for BinaryOperand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self {
-            Self::Addition(lhs, rhs) => write!(f, "Addition(lhs={}, rhs={})", lhs, rhs),
-            Self::Subtraction(lhs, rhs) => write!(f, "Subtraction(lhs={}, rhs={})", lhs, rhs),
-            Self::MultiplicativeExpr(expr) => write!(f, "{}", expr),
+        match self {
+            BinaryOperand::BinaryOp(boxed_op) => {
+                let op = boxed_op;
+                writeln!(
+                    f,
+                    "BinaryOp(op={:?}, lhs={}, rhs={})",
+                    op.op, op.lhs, op.rhs
+                )
+            }
+            BinaryOperand::Operand(op) => write!(f, "{}", op),
         }
     }
 }
 
-type Expression = AdditiveExpr;
+type Expression = BinaryOperand;
 
-#[derive(Debug)]
 pub enum Statement {
     Return(Expression),
 }
@@ -311,7 +277,6 @@ impl Display for Statement {
     }
 }
 
-#[derive(Debug)]
 pub struct Function {
     pub name: String,
     pub body: Statement,
@@ -357,7 +322,6 @@ impl Display for Function {
     }
 }
 
-#[derive(Debug)]
 pub enum Program {
     Main(Function),
 }
