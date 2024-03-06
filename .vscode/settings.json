@@ -1,5 +1,6 @@
 {
     "cSpell.words": [
+        "binop",
         "cmpl",
         "idiv",
         "imul",
@@ -8,6 +9,11 @@
         "noprefix",
         "peekable",
         "regexes",
-        "sete"
+        "sete",
+        "setg",
+        "setge",
+        "setl",
+        "setle",
+        "setne"
     ]
 }

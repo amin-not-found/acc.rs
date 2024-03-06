@@ -153,6 +153,14 @@ pub enum CToken {
     DivisionSign,
     PlusSign,
     MinusSign,
+    LessThan,
+    GreaterThan,
+    LessEqual,
+    GreaterEqual,
+    Equal,
+    NotEqual,
+    LogicalAnd,
+    LogicalOr,
     ReturnKeyword,
     IntKeyword,
     Identifier,
@@ -182,17 +190,28 @@ impl<'a> Default for CTokenizer<'a> {
             (CToken::OpenParenthesis, r"^\("),
             (CToken::CloseParenthesis, r"^\)"),
             (CToken::Semicolon, r"^;"),
+            //// Operators
+            // operators with two chars come first
+            (CToken::LessEqual, r"^<="),
+            (CToken::GreaterEqual, r"^>="),
+            (CToken::Equal, r"^=="),
+            (CToken::NotEqual, r"^!="),
+            (CToken::LogicalAnd, r"^&&"),
+            (CToken::LogicalOr, r"^\|\|"),
             (CToken::BitWiseComplement, r"^\~"),
             (CToken::LogicalNegation, r"^!"),
             (CToken::MultiplicationSign, r"^\*"),
             (CToken::DivisionSign, r"^/"),
             (CToken::PlusSign, r"^\+"),
             (CToken::MinusSign, r"^\-"),
-            ///////// Start of keywords
+            (CToken::LessThan, r"^<"),
+            (CToken::GreaterThan, r"^>"),
+            //// Start of keywords
             (CToken::ReturnKeyword, r"^return\s"),
             (CToken::IntKeyword, r"^int\s"),
-            ///////// End of keywords
+            //// Identifier
             (CToken::Identifier, r"^[a-zA-Z]\w*"),
+            //// Literals
             (CToken::IntLiteral, r"^[0-9]+"),
         ])
     }

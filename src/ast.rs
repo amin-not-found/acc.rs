@@ -1,4 +1,4 @@
-use std::{fmt::Display, mem::discriminant};
+use std::{fmt::Display, mem::discriminant, sync::Mutex};
 
 use crate::tokenizer::{CToken, Token, Tokens};
 
@@ -33,6 +33,15 @@ fn expect_token<'a>(
         ));
     }
     Ok(token)
+}
+
+// simple auto incremental label generation in form of "L%d"
+fn gen_label() -> String {
+    const LABEL_PREFIX: char = 'L';
+    static COUNTER: Mutex<u32> = Mutex::new(0);
+    let mut counter = COUNTER.lock().unwrap();
+    *counter += 1;
+    format!("{}{}", LABEL_PREFIX, *counter)
 }
 
 #[derive(Debug)]
@@ -151,18 +160,94 @@ impl AsmGen for BinaryOp {
             ),
             CToken::PlusSign => String::from("add rax, rbx"),
             CToken::MinusSign => "sub rax, rbx".to_owned(),
-            _ => panic!("Can't produce assembly from operation with {:?}", self.op),
+            CToken::LessThan => String::from(
+                "cmp rax, rbx\n\
+                 setl al\n\
+                 movzx eax, al\n",
+            ),
+            CToken::GreaterThan => String::from(
+                "cmp rax, rbx\n\
+                 setg al\n\
+                 movzx eax, al\n",
+            ),
+            CToken::LessEqual => String::from(
+                "cmp rax, rbx\n\
+                 setle al\n\
+                 movzx eax, al\n",
+            ),
+            CToken::GreaterEqual => String::from(
+                "cmp rax, rbx\n\
+                 setge al\n\
+                 movzx eax, al\n",
+            ),
+
+            CToken::Equal => String::from(
+                "cmp rax, rbx\n\
+                 sete al\n\
+                 movzx eax, al\n",
+            ),
+            CToken::NotEqual => String::from(
+                "cmp rax, rbx\n\
+                 setne al\n\
+                 movzx eax, al\n",
+            ),
+            // We're gonna handle OR and AND differently
+            // as they need to support short circuiting
+            _ => String::new(),
         };
-        format!(
-            "{}\
+        if !op.is_empty() {
+            format!(
+                "{}\
                 push rax\n\
                 {}\
                 pop rbx\n\
                 {}\n",
-            self.rhs.to_asm(),
-            self.lhs.to_asm(),
-            op
-        )
+                self.rhs.to_asm(),
+                self.lhs.to_asm(),
+                op
+            )
+        } else {
+            match self.op {
+                // Here we only handle OR and AND
+                CToken::LogicalOr => {
+                    // TEST sets ZF to the result of AND operation
+                    // bitwise AND is zero when both operands are zero
+                    // in this we have not equal if eax is not zero
+                    format!(
+                        "{1}\
+                         test rax, rax\n\
+                         mov rax, 1\n\
+                         jne .{0}\n\
+                         {2}\
+                         test rax, rax\n\
+                         mov rax, 0\n\
+                         setne al\n\
+                         .{0}:\n",
+                        gen_label(),
+                        self.lhs.to_asm(),
+                        self.rhs.to_asm()
+                    )
+                }
+                CToken::LogicalAnd => {
+                    // opposite of what we did for OR
+                    format!(
+                        "{1}\
+                         test rax, rax\n\
+                         mov rax, 0\n\
+                         je .{0}\n\
+                         {2}\
+                         test rax, rax\n\
+                         mov rax, 0\n\
+                         setne al\n\
+                         .{0}:\n",
+                        gen_label(),
+                        self.lhs.to_asm(),
+                        self.rhs.to_asm()
+                    )
+                }
+                _ => panic!("Can't produce assembly from operation with {:?}", self.op),
+            }
+        }
     }
 }
 
@@ -207,6 +292,10 @@ impl Parse for BinaryOperand {
         use CToken::*;
 
         let precedence_ops = vec![
+            vec![LogicalOr],
+            vec![LogicalAnd],
+            vec![Equal, NotEqual],
+            vec![LessThan, GreaterThan, LessEqual, GreaterEqual],
             vec![PlusSign, MinusSign],
             vec![MultiplicationSign, DivisionSign],
         ];
