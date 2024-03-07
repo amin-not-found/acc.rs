@@ -288,6 +288,12 @@ impl BinaryOperand {
 }
 
 impl Parse for BinaryOperand {
+    // <logical-or-expr> ::= <logical-and-expr> { "||" <logical-and-expr> } 
+    // <logical-and-expr> ::= <equality-expr> { "&&" <equality-expr> }
+    // <equality-expr> ::= <relational-expr> { ("!=" | "==") <relational-expr> }
+    // <relational-expr> ::= <additive-expr> { ("<" | ">" | "<=" | ">=") <additive-expr> }
+    // <additive-expr> ::= <multiplicative-expr> { ("+" | "-") <multiplicative-expr> }
+    // <multiplicative-expr> ::= <primary-expr> { ("*" | "/") <primary-expr> }
     fn parse<'a>(tokens: &mut CTokens<'a>) -> Result<Self, ParseError<'a>> {
         use CToken::*;
 
@@ -361,7 +367,7 @@ impl AsmGen for Statement {
 impl Display for Statement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Return(expr) => writeln!(f, "Return(\n    {}\n  )", expr),
+            Self::Return(expr) => writeln!(f, "Return(\n    {}  )", expr),
         }
     }
 }
